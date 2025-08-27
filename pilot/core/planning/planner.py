@@ -1,66 +1,80 @@
 """
-LLM计划生成模块
+LLM驱动的计划生成器
 """
 
 import json
 import re
 from typing import Optional
-from openai import OpenAI
 from datetime import datetime, time
 
-from .models import PlanInput, PlanOutput, Task, TimeSlot, TimeBlock
-from .config import Config
+from ...interfaces.planner import PlannerInterface
+from ...interfaces.llm import LLMInterface
+from ..models.plan import PlanInput, PlanOutput, Task, TimeSlot, TimeBlock
+from ..models.config import PilotConfig
 
 
-class PlannerLLM:
+class LLMPlanner(PlannerInterface):
     """LLM驱动的计划生成器"""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: PilotConfig, llm: LLMInterface):
         self.config = config
-        if not config.has_openai_key():
-            raise ValueError("未设置OpenAI API密钥，请设置环境变量 OPENAI_API_KEY")
-        
-        self.client = OpenAI(api_key=config.openai_api_key)
+        self.llm = llm
         self.system_prompt = config.get_system_prompt()
     
-    def generate_plan(self, plan_input: PlanInput, retry_count: int = 1) -> Optional[PlanOutput]:
+    def generate_plan(self, plan_input: PlanInput, custom_tasks: str = None) -> Optional[PlanOutput]:
         """生成计划"""
+        if not self.validate_input(plan_input):
+            return None
+        
         try:
-            user_prompt = self._build_user_prompt(plan_input)
+            user_prompt = self._build_user_prompt(plan_input, custom_tasks)
             
-            # 调用OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.config.openai_model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=self.config.openai_max_tokens,
-                temperature=self.config.openai_temperature,
+            # 调用LLM API
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            
+            response = self.llm.chat_completion(
+                messages=messages,
+                model=self.config.openai.effective_model,
+                max_tokens=self.config.openai.effective_max_tokens,
+                temperature=self.config.openai.effective_temperature,
                 response_format={"type": "json_object"}
             )
             
+            if not response:
+                print("❌ LLM调用失败")
+                return None
+            
             # 解析响应
-            content = response.choices[0].message.content.strip()
-            plan_data = self._parse_json_response(content)
+            plan_data = self._parse_json_response(response)
             
             if plan_data:
                 return self._convert_to_plan_output(plan_data)
             else:
-                print(f"❌ JSON解析失败，原始响应：\n{content}")
-                if retry_count > 0:
-                    print(f"🔄 重试中... ({retry_count} 次剩余)")
-                    return self.generate_plan(plan_input, retry_count - 1)
+                print(f"❌ JSON解析失败，原始响应：\n{response}")
                 return None
                 
         except Exception as e:
-            print(f"❌ LLM调用失败: {str(e)}")
-            if retry_count > 0:
-                print(f"🔄 重试中... ({retry_count} 次剩余)")
-                return self.generate_plan(plan_input, retry_count - 1)
+            print(f"❌ 计划生成失败: {str(e)}")
             return None
     
-    def _build_user_prompt(self, plan_input: PlanInput) -> str:
+    def validate_input(self, plan_input: PlanInput) -> bool:
+        """验证输入参数"""
+        if plan_input.work_window_start >= plan_input.work_window_end:
+            print("❌ 工作时间窗口无效")
+            return False
+        
+        # 验证会议时间不冲突
+        for i, meeting in enumerate(plan_input.meetings):
+            if meeting.start >= meeting.end:
+                print(f"❌ 会议{i+1}时间无效")
+                return False
+        
+        return True
+    
+    def _build_user_prompt(self, plan_input: PlanInput, custom_tasks: str = None) -> str:
         """构建用户提示词"""
         # 计算可用容量
         work_start = datetime.combine(plan_input.date, plan_input.work_window_start)
@@ -77,6 +91,11 @@ class PlannerLLM:
             meetings_list = [f"{m.start.strftime('%H:%M')}-{m.end.strftime('%H:%M')}" for m in plan_input.meetings]
             meetings_text = f"已安排会议: {', '.join(meetings_list)}\n"
         
+        # 构建任务内容
+        tasks_text = ""
+        if custom_tasks:
+            tasks_text = f"今日具体任务:\n{custom_tasks}\n\n"
+        
         prompt = f"""请为以下工作日生成时间规划：
 
 日期: {plan_input.date.strftime('%Y年%m月%d日')}
@@ -84,7 +103,11 @@ class PlannerLLM:
 {meetings_text}可用时间: {available_minutes}分钟
 模式: {'工作模式' if plan_input.mode == 'work' else '学习模式'}
 
-请生成包含3-5个重点任务的工作计划，每个任务≤50分钟。考虑能量管理，合理安排深度工作、常规任务和轻量任务。
+重要时间规则:
+- 午休时间: 12:00-14:00 为固定午休时间，不安排任何工作
+- 下午工作: 14:10 开始恢复工作安排
+
+{tasks_text}请根据以上任务生成包含3-5个重点任务的工作计划，每个任务≤50分钟。考虑能量管理，合理安排深度工作、常规任务和轻量任务。
 
 输出严格的JSON格式，不要包含任何markdown或其他格式。"""
         

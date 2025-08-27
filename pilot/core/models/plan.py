@@ -1,11 +1,10 @@
 """
-数据模型定义
+计划相关数据模型
 """
 
 from datetime import date, time, datetime, timedelta
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
-from enum import Enum
 
 
 class TimeSlot(BaseModel):
@@ -56,61 +55,3 @@ class PlanOutput(BaseModel):
     top_tasks: List[Task] = Field(default_factory=list)
     time_blocks: List[TimeBlock] = Field(default_factory=list)
     risks: List[str] = Field(default_factory=list)
-
-
-class PomodoroType(str, Enum):
-    """番茄钟类型"""
-    WORK = "work"
-    STUDY = "study"
-    BREAK = "break"
-    TASK = "task"
-
-
-class ScheduleItem(BaseModel):
-    """日程项目"""
-    start_time: datetime
-    end_time: datetime
-    title: str
-    description: str = ""
-    type: PomodoroType
-    location: str = ""
-    
-    @property
-    def duration_minutes(self) -> int:
-        """时长（分钟）"""
-        return int((self.end_time - self.start_time).total_seconds() / 60)
-
-
-class CalendarEvent(BaseModel):
-    """日历事件"""
-    summary: str
-    description: str
-    start_datetime: datetime
-    end_datetime: datetime
-    location: str = ""
-    
-    @classmethod
-    def from_schedule_item(cls, item: ScheduleItem) -> "CalendarEvent":
-        """从日程项目创建日历事件"""
-        type_prefix = {
-            PomodoroType.WORK: "[Work]",
-            PomodoroType.STUDY: "[Study]", 
-            PomodoroType.BREAK: "[Break]",
-            PomodoroType.TASK: "[Task]"
-        }
-        
-        prefix = type_prefix.get(item.type, "[Task]")
-        summary = f"{prefix} {item.title}"
-        
-        description = f"{item.description}\n\n" if item.description else ""
-        description += f"来源: P.I.L.O.T. v1.0-MVP\n"
-        description += f"时长: {item.duration_minutes}分钟\n"
-        description += f"类型: {item.type.value}"
-        
-        return cls(
-            summary=summary,
-            description=description,
-            start_datetime=item.start_time,
-            end_datetime=item.end_time,
-            location=item.location
-        )

@@ -1,168 +1,159 @@
-# P.I.L.O.T. Terminal MVP
+# P.I.L.O.T. - Personal Intelligent Life Organization Tool
 
-**Personal Intelligent Life Organization Tool** - 从计划到日历的自动化闭环
+🚀 **重构版本 v1.0.0-MVP** - 智能个人生活组织工具
 
-## 🚀 功能特性
+## 🎯 功能特性
 
-- **智能计划生成**: 基于LLM生成今日工作计划和任务拆解
-- **番茄钟编排**: 自动编排工作番茄钟(50/10×6)或学习番茄钟(45/15×N)  
-- **日历集成**: 支持Google Calendar导入或ICS文件导出
-- **会议避让**: 自动避开已有会议时间
-- **时间管理**: 基于能量管理的任务安排
+- 🧠 **智能计划生成**: 基于LLM的个性化工作计划
+- 🍅 **番茄钟管理**: 自动调度和提醒
+- 📅 **日历集成**: 支持Google Calendar和ICS导出
+- 💬 **自然语言交互**: 直接用中文描述需求
+- ⏰ **午休时间管理**: 自动避开12:00-14:00午休
+- 🔔 **智能提醒**: 番茄钟开始/结束提醒
 
-## 📦 安装
+## 🏗️ 架构设计
 
-```bash
-# 克隆项目
-git clone <repository-url>
-cd pilot-terminal
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 运行设置向导
-python setup.py
+### 模块化架构
 ```
+pilot/
+├── core/              # 核心业务逻辑
+│   ├── planning/      # 计划生成
+│   ├── scheduling/    # 调度管理  
+│   ├── nlp/          # 自然语言处理
+│   └── models/       # 数据模型
+├── integrations/     # 外部集成
+│   ├── llm/         # LLM服务
+│   ├── calendar/    # 日历服务
+│   └── notification/ # 通知服务
+├── ui/              # 用户界面
+│   ├── cli/         # 命令行界面
+│   └── chat/        # 聊天界面
+├── utils/           # 工具模块
+└── interfaces/      # 抽象接口
+```
+
+### 设计原则
+- **接口驱动**: 支持依赖注入和模块替换
+- **单一职责**: 每个模块专注特定功能
+- **类型安全**: 使用Pydantic确保数据结构正确性
+- **配置集中**: 统一的配置管理
+
+## 🚀 快速开始
+
+### 1. 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+### 2. 初始化设置
+```bash
+python setup_new.py
+```
+
+### 3. 开始使用
+
+**交互模式:**
+```bash
+python main.py chat -i
+```
+
+**单次命令:**
+```bash
+python main.py chat "今天可用480分钟，会议：13:30–14:00。重点推进项目A/项目B。"
+```
+
+## 💬 使用示例
+
+### 生成今日计划
+```
+👤 您: 今天的工作任务是：A.完成个人助手agent的开发，B.完成ANR优化验证，C.跟进AI writing需求。重点完成A、B两个任务
+
+🤖 P.I.L.O.T.: [自动解析并生成番茄钟计划]
+```
+
+### 收集箱功能
+```
+👤 您: 收集箱：刚读了一篇关于AI效率工具的文章
+🤖 P.I.L.O.T.: [自动提取要点、标签、任务建议]
+```
+
+## 📅 日历集成
+
+支持多种日历平台：
+
+1. **📱 iOS/Mac日历**: 自动打开日历应用导入
+2. **🌐 Google Calendar**: 在线同步到云端
+3. **📄 ICS文件**: 通用格式，支持所有日历应用
+
+### 提醒功能
+- 🍅 **番茄钟**: 开始前5分钟+1分钟提醒
+- ☕ **休息**: 结束前1分钟提醒
+- 📋 **任务**: 开始前10分钟提醒
 
 ## ⚙️ 配置
 
-### OpenAI API密钥
+配置文件位置: `~/.pilot/config.json`
+
+### 主要配置项
+```json
+{
+  "openai": {
+    "api_key": "your-api-key",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-3.5-turbo"
+  },
+  "pomodoro": {
+    "work_focus_min": 50,
+    "work_break_min": 10,
+    "work_cycles": 6
+  }
+}
+```
+
+## 🔧 开发
+
+### 项目结构
+- **可维护性**: 模块化设计，职责清晰
+- **可扩展性**: 插件化架构，易于添加新功能
+- **可测试性**: 接口抽象，支持单元测试
+
+### 添加新功能
+1. 定义接口 (`interfaces/`)
+2. 实现核心逻辑 (`core/`)
+3. 创建集成模块 (`integrations/`)
+4. 更新UI (`ui/`)
+
+## 📋 命令参考
 
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+python main.py chat -i                    # 交互模式
+python main.py chat "描述工作需求"         # 单次解析
+python main.py version                    # 版本信息
 ```
 
-### Google Calendar (可选)
+## 🆚 重构对比
 
-1. 访问 [Google Cloud Console](https://console.cloud.google.com/)
-2. 创建项目并启用Calendar API
-3. 创建OAuth 2.0凭据并下载`credentials.json`
-4. 将文件放到 `~/.pilot/credentials.json`
+| 特性 | 重构前 | 重构后 |
+|------|--------|--------|
+| 架构 | 单体文件 | 模块化分层 |
+| 接口 | 硬编码依赖 | 接口驱动 |
+| 配置 | 分散管理 | 集中配置 |
+| 测试 | 难以测试 | 易于测试 |
+| 扩展 | 修改现有代码 | 插件式添加 |
 
-## 🎯 使用方法
+## 🔄 备份说明
 
-### 基本使用
+旧版本代码已备份到 `.back/` 目录：
+- `.back/src/` - 原始源代码
+- `.back/pilot.py` - 原始主文件
+- `.back/test_pilot.py` - 原始测试文件
+
+## 🎉 开始体验
+
+重构后的P.I.L.O.T.为您提供更强大、更灵活的时间管理能力！
 
 ```bash
-# 生成今日计划
-python pilot.py
-
-# 指定日期和会议
-python pilot.py --date 2025-01-20 --meetings 13:30-14:00,15:30-16:00
-
-# 学习模式
-python pilot.py --mode study --cycles 4
+python main.py chat -i
 ```
 
-### 完整参数
-
-```bash
-python pilot.py \
-  --date 2025-01-20 \
-  --work-window 09:30-18:30 \
-  --meetings 13:30-14:00,15:30-16:00 \
-  --mode work \
-  --cycles 6 \
-  --pomodoro-start 09:30 \
-  --calendar google \
-  --dry-run
-```
-
-### 参数说明
-
-- `--date`: 目标日期 (YYYY-MM-DD)，默认今天
-- `--work-window`: 工作时间窗口 (HH:MM-HH:MM)，默认09:30-18:30
-- `--meetings`: 会议时间，逗号分隔 (HH:MM-HH:MM,...)
-- `--mode`: 模式选择
-  - `work`: 工作模式 (50分钟专注 + 10分钟休息 × 6轮)
-  - `study`: 学习模式 (45分钟专注 + 15分钟休息 × N轮)
-- `--cycles`: 学习模式轮数 (默认4)
-- `--pomodoro-start`: 番茄钟起始时间，默认为工作窗口开始
-- `--calendar`: 日历输出方式
-  - `google`: Google Calendar
-  - `ics`: ICS文件导出
-  - `none`: 仅显示计划
-- `--dry-run`: 预览模式，不实际导入日历
-
-## 📋 示例输出
-
-```
-🚀 P.I.L.O.T. v1.0-MVP 启动
-📅 日期: 2025-01-20
-⏰ 工作时间: 09:30 - 18:30
-🍅 模式: work (50/10×6)
-📋 会议: 13:30-14:00
-
-🧠 正在生成智能计划...
-✅ 计划生成完成
-
-🍅 正在编排番茄钟...
-✅ 成功编排 6 个番茄钟
-
-==================================================
-📋 今日计划预览
-==================================================
-
-🎯 重点任务:
-  1. 项目架构设计 (50分钟) 🔥
-  2. 代码重构 (45分钟) ⚡
-  3. 文档更新 (30分钟) 🌙
-
-🍅 番茄钟安排:
-  09:30 - 10:20: 🍅 番茄钟 #1
-  10:20 - 10:30: ☕ 番茄休息
-  10:30 - 11:20: 🍅 番茄钟 #2
-  ...
-
-📅 正在导入GOOGLE日历...
-✅ Google Calendar 导入成功
-
-🎉 P.I.L.O.T. 执行完成! 祝您今日高效!
-```
-
-## 🗂 项目结构
-
-```
-pilot-terminal/
-├── pilot.py              # 主入口
-├── setup.py              # 设置向导
-├── requirements.txt      # 依赖列表
-├── src/
-│   ├── config.py         # 配置管理
-│   ├── models.py         # 数据模型
-│   ├── planner.py        # LLM计划生成
-│   ├── scheduler.py      # 番茄钟编排
-│   └── calendar_manager.py # 日历管理
-└── exports/              # ICS文件导出目录
-```
-
-## 🔧 故障排除
-
-### OpenAI API调用失败
-- 检查API密钥是否正确设置
-- 确认账户有足够余额
-- 检查网络连接
-
-### Google Calendar导入失败
-- 确认credentials.json文件存在
-- 检查是否已启用Calendar API
-- 首次使用需要浏览器授权
-
-### 时间冲突
-- 系统会自动避让会议时间
-- 如无足够空闲时间，会显示警告
-- 可调整工作窗口或减少番茄钟轮数
-
-## 📝 版本信息
-
-- 版本: v1.0.0-MVP
-- 时区: Asia/Shanghai
-- Python要求: ≥3.8
-
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request来改进P.I.L.O.T.！
-
-## 📄 许可证
-
-MIT License
+让AI助手帮您规划完美的一天！
