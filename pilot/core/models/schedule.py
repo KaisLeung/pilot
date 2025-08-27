@@ -25,6 +25,11 @@ class ScheduleItem(BaseModel):
     description: str = ""
     type: PomodoroType
     location: str = ""
+    # 新增任务相关字段
+    task_title: str = ""  # 关联的主任务标题
+    subtask: str = ""  # 具体的子任务或任务内容
+    focus_content: str = ""  # 专注内容描述
+    cycle_number: int = 0  # 番茄钟循环编号
     
     def duration_minutes(self) -> int:
         """时长（分钟）"""

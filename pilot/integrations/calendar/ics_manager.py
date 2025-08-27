@@ -132,7 +132,11 @@ class ICSCalendarManager(CalendarInterface):
         emoji = emoji_map.get(item.type, "📅")
         
         if item.type == PomodoroType.FOCUS:
-            return f"{emoji} 番茄钟 #{getattr(item, 'cycle_number', '1')} - 专注时间"
+            cycle_num = getattr(item, 'cycle_number', 1)
+            if item.task_title and item.subtask:
+                return f"{emoji} 番茄钟 #{cycle_num}: {item.subtask}"
+            else:
+                return f"{emoji} 番茄钟 #{cycle_num} - 专注时间"
         elif item.type == PomodoroType.SHORT_BREAK:
             return f"{emoji} 番茄休息"
         elif item.type == PomodoroType.LONG_BREAK:
@@ -152,12 +156,36 @@ class ICSCalendarManager(CalendarInterface):
             descriptions.extend([
                 "🎯 专注工作时间",
                 f"⏱️ 持续时间: {item.duration_minutes()}分钟",
-                "",
-                "💡 提示:",
+                ""
+            ])
+            
+            # 添加任务相关信息
+            if item.task_title:
+                descriptions.extend([
+                    "📋 本次番茄钟任务:",
+                    f"主任务: {item.task_title}",
+                ])
+                
+                if item.subtask and item.subtask != item.task_title:
+                    descriptions.append(f"具体内容: {item.subtask}")
+                
+                if item.focus_content:
+                    descriptions.extend([
+                        "",
+                        "🎯 专注要点:",
+                        item.focus_content,
+                    ])
+                
+                descriptions.append("")
+            
+            descriptions.extend([
+                "💡 专注提示:",
                 "• 关闭通知和干扰源",
                 "• 专注于当前任务",
-                "• 保持深度工作状态"
+                "• 保持深度工作状态",
+                "• 遇到干扰记录后继续"
             ])
+            
         elif item.type == PomodoroType.SHORT_BREAK:
             descriptions.extend([
                 "☕ 短休息时间",
@@ -166,8 +194,10 @@ class ICSCalendarManager(CalendarInterface):
                 "💡 建议活动:",
                 "• 喝水或伸展身体",
                 "• 眺望远方放松眼睛",
-                "• 做简单的运动"
+                "• 做简单的运动",
+                "• 避免查看手机或电脑"
             ])
+            
         elif item.type == PomodoroType.LONG_BREAK:
             descriptions.extend([
                 "🛋️ 长休息时间",
@@ -176,19 +206,34 @@ class ICSCalendarManager(CalendarInterface):
                 "💡 建议活动:",
                 "• 散步或户外活动",
                 "• 吃点心补充能量",
-                "• 与同事聊天放松"
+                "• 与同事聊天放松",
+                "• 回顾前面的工作成果"
             ])
+            
         elif item.type == PomodoroType.LUNCH:
             descriptions.extend([
                 "🍽️ 午餐休息时间",
                 "⏱️ 建议用餐并适当休息",
-                "🕐 14:10 准备恢复工作"
+                "🕐 14:10 准备恢复工作",
+                "",
+                "💡 午休建议:",
+                "• 营养均衡的午餐",
+                "• 适当的休息或小憩",
+                "• 为下午工作做准备"
             ])
+            
         elif item.type == PomodoroType.TASK:
             descriptions.extend([
                 f"📋 任务: {item.title}",
                 f"⏱️ 预计用时: {item.duration_minutes()}分钟"
             ])
+            
+            if item.focus_content:
+                descriptions.extend([
+                    "",
+                    "📝 任务详情:",
+                    item.focus_content
+                ])
         
         descriptions.extend([
             "",

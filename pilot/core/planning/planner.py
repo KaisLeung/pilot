@@ -9,7 +9,7 @@ from datetime import datetime, time
 
 from ...interfaces.planner import PlannerInterface
 from ...interfaces.llm import LLMInterface
-from ..models.plan import PlanInput, PlanOutput, Task, TimeSlot, TimeBlock
+from ..models.plan import PlanInput, PlanOutput, Task, TimeSlot, TimeBlock, PomodoroTaskMapping
 from ..models.config import PilotConfig
 
 
@@ -28,6 +28,13 @@ class LLMPlanner(PlannerInterface):
         
         try:
             user_prompt = self._build_user_prompt(plan_input, custom_tasks)
+            
+            # 计算可用时间
+            work_start = datetime.combine(plan_input.date, plan_input.work_window_start)
+            work_end = datetime.combine(plan_input.date, plan_input.work_window_end)
+            total_minutes = int((work_end - work_start).total_seconds() / 60)
+            meeting_minutes = sum(meeting.duration_minutes() for meeting in plan_input.meetings)
+            available_minutes = total_minutes - meeting_minutes
             
             # 调用LLM API
             messages = [
@@ -51,6 +58,8 @@ class LLMPlanner(PlannerInterface):
             plan_data = self._parse_json_response(response)
             
             if plan_data:
+                # 后处理：确保任务时间分配符合权重比例
+                plan_data = self._adjust_task_time_by_weight(plan_data, available_minutes)
                 return self._convert_to_plan_output(plan_data)
             else:
                 print(f"❌ JSON解析失败，原始响应：\n{response}")
@@ -107,7 +116,13 @@ class LLMPlanner(PlannerInterface):
 - 午休时间: 12:00-14:00 为固定午休时间，不安排任何工作
 - 下午工作: 14:10 开始恢复工作安排
 
-{tasks_text}请根据以上任务生成包含3-5个重点任务的工作计划，每个任务≤50分钟。考虑能量管理，合理安排深度工作、常规任务和轻量任务。
+任务时间分配规则:
+- 总工作时间按8小时(480分钟)计算，实际可用时间为去除会议和午休后的时间
+- 根据任务重要性和复杂度分配权重(1-10分)，重点任务权重8-10，普通任务5-7，轻量任务3-5
+- 任务时间 = (任务权重 / 所有任务权重总和) × 总可用时间
+- 高权重任务应获得更多时间分配，确保重点工作得到充分时间
+
+{tasks_text}请根据以上任务生成工作计划，按照权重比例分配时间，不要固定每个任务50分钟。重点任务应该获得更多时间，轻量任务时间相对较少。
 
 输出严格的JSON格式，不要包含任何markdown或其他格式。"""
         
@@ -147,13 +162,25 @@ class LLMPlanner(PlannerInterface):
             if task_data.get('scheduled_end'):
                 scheduled_end = time.fromisoformat(task_data['scheduled_end'])
             
+            # 处理能量等级的英文到中文映射
+            energy_mapping = {
+                'High': '高',
+                'Medium': '中', 
+                'Low': '低'
+            }
+            energy_value = task_data.get('energy', '中')
+            if energy_value in energy_mapping:
+                energy_value = energy_mapping[energy_value]
+            
             task = Task(
                 title=task_data['title'],
                 est_min=task_data['est_min'],
-                energy=task_data.get('energy', '中'),
+                energy=energy_value,
                 scheduled_start=scheduled_start,
                 scheduled_end=scheduled_end,
-                type=task_data.get('type', 'normal')
+                type=task_data.get('type', 'normal'),
+                weight=task_data.get('weight', 5),
+                subtasks=task_data.get('subtasks', [])
             )
             tasks.append(task)
         
@@ -176,10 +203,67 @@ class LLMPlanner(PlannerInterface):
             )
             time_blocks.append(block)
         
+        # 解析pomodoro_task_mapping
+        pomodoro_mappings = []
+        for mapping_data in plan_data.get('pomodoro_task_mapping', []):
+            mapping = PomodoroTaskMapping(
+                pomodoro_number=mapping_data['pomodoro_number'],
+                task_title=mapping_data['task_title'],
+                subtask=mapping_data['subtask'],
+                focus_content=mapping_data['focus_content']
+            )
+            pomodoro_mappings.append(mapping)
+        
         return PlanOutput(
             capacity_min=plan_data.get('capacity_min', 0),
             meetings=meetings,
             top_tasks=tasks,
             time_blocks=time_blocks,
+            pomodoro_task_mapping=pomodoro_mappings,
             risks=plan_data.get('risks', [])
         )
+    
+    def _adjust_task_time_by_weight(self, plan_data: dict, available_minutes: int) -> dict:
+        """根据权重调整任务时间分配"""
+        tasks = plan_data.get('top_tasks', [])
+        if not tasks:
+            return plan_data
+        
+        # 确保所有任务都有权重，如果没有则根据类型设置默认权重
+        for task in tasks:
+            if 'weight' not in task or task['weight'] == 0:
+                task_type = task.get('type', 'normal')
+                if task_type == 'deep':
+                    task['weight'] = 8  # 深度任务高权重
+                elif task_type == 'normal':
+                    task['weight'] = 6  # 常规任务中等权重
+                elif task_type == 'light':
+                    task['weight'] = 4  # 轻量任务低权重
+                else:
+                    task['weight'] = 5  # 默认权重
+        
+        # 计算权重总和
+        total_weight = sum(task['weight'] for task in tasks)
+        if total_weight == 0:
+            return plan_data
+        
+        # 预留一些缓冲时间(10%)用于任务间隙和意外情况
+        effective_work_time = int(available_minutes * 0.9)
+        
+        # 根据权重比例分配时间
+        for task in tasks:
+            weight_ratio = task['weight'] / total_weight
+            allocated_time = int(effective_work_time * weight_ratio)
+            
+            # 确保任务时间至少25分钟，最多150分钟
+            allocated_time = max(25, min(150, allocated_time))
+            task['est_min'] = allocated_time
+        
+        # 重新计算时间块，确保时间分配一致
+        plan_data['top_tasks'] = tasks
+        
+        print(f"🔄 任务时间已按权重重新分配:")
+        for i, task in enumerate(tasks, 1):
+            print(f"  {i}. {task['title']}: {task['est_min']}分钟 (权重: {task['weight']})")
+        
+        return plan_data
